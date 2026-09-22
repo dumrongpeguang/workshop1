@@ -20,19 +20,49 @@ Install-Module Microsoft.Graph -Scope CurrentUser -Force
 
 ## 2. การ Deploy สคริปต์
 
-### 2.1 Clone repository ลงเครื่องที่ใช้งาน (Admin Workstation หรือ Jump Server)
+### 2.1 ติดตั้ง Git (ถ้ายังไม่มี)
+
+ถ้ารันคำสั่ง `git --version` แล้วขึ้น error เช่น `'git' is not recognized as an internal or external command` แปลว่าเครื่องยังไม่ได้ติดตั้ง Git ให้ติดตั้งก่อนตามระบบปฏิบัติการ:
+
+**Windows** (เลือกวิธีใดวิธีหนึ่ง):
+
+```powershell
+# ใช้ winget (Windows 10/11)
+winget install --id Git.Git -e --source winget
+
+# หรือใช้ Chocolatey
+choco install git -y
+```
+
+หรือดาวน์โหลดตัวติดตั้งจาก https://git-scm.com/download/win แล้วรันแบบ Next-Next-Finish
+
+**Linux (Debian/Ubuntu):**
+
+```bash
+sudo apt update && sudo apt install -y git
+```
+
+หลังติดตั้งเสร็จ ให้**เปิด terminal ใหม่**แล้วตรวจสอบอีกครั้ง:
+
+```powershell
+git --version
+```
+
+ถ้ายังขึ้น error หลังติดตั้งแล้ว ให้ตรวจสอบว่า path ของ Git (เช่น `C:\Program Files\Git\cmd`) ถูกเพิ่มใน environment variable `PATH` หรือยัง แล้ว restart เครื่อง/terminal อีกครั้ง
+
+### 2.2 Clone repository ลงเครื่องที่ใช้งาน (Admin Workstation หรือ Jump Server)
 
 ```powershell
 git clone <repository-url> C:\IT-Automation
 ```
 
-### 2.2 (ทางเลือก) Deploy ไปยังเครื่องอื่นด้วย Copy/Robocopy
+### 2.3 (ทางเลือก) Deploy ไปยังเครื่องอื่นด้วย Copy/Robocopy
 
 ```powershell
 robocopy C:\IT-Automation \\FILESERVER\Scripts\IT-Automation /MIR
 ```
 
-### 2.3 ตั้งค่า Execution Policy
+### 2.4 ตั้งค่า Execution Policy
 
 โดย default เครื่อง Windows จะ block การรันสคริปต์ที่ไม่ได้ลงนาม ให้ตั้งค่าที่เครื่องที่จะรันสคริปต์:
 
@@ -42,7 +72,7 @@ Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned
 
 > หมายเหตุด้านความปลอดภัย: หลีกเลี่ยงการตั้งเป็น `Unrestricted` แบบ `LocalMachine` เพราะเปิดช่องให้สคริปต์ที่ไม่รู้ที่มารันได้ทั้งเครื่อง ใช้ `RemoteSigned` และจำกัด scope เป็น `CurrentUser` หรือ `Process` เท่าที่จำเป็น
 
-### 2.4 (ทางเลือก) Unblock ไฟล์ที่ดาวน์โหลดมาจากอินเทอร์เน็ต
+### 2.5 (ทางเลือก) Unblock ไฟล์ที่ดาวน์โหลดมาจากอินเทอร์เน็ต
 
 ```powershell
 Get-ChildItem -Path C:\IT-Automation -Recurse -Filter *.ps1 | Unblock-File
@@ -111,7 +141,8 @@ Register-ScheduledTask -TaskName "Check-DiskSpace" -Action $action -Trigger $tri
 
 | อาการ | สาเหตุที่เป็นไปได้ | วิธีแก้ |
 |---|---|---|
-| `...cannot be loaded because running scripts is disabled` | Execution Policy ปิดกั้น | รันคำสั่งใน 2.3 |
+| `'git' is not recognized as an internal or external command` | ยังไม่ได้ติดตั้ง Git หรือติดตั้งแล้วแต่ PATH ไม่ถูกอัปเดต | ติดตั้ง Git ตามขั้นตอนใน 2.1 แล้วเปิด terminal ใหม่ |
+| `...cannot be loaded because running scripts is disabled` | Execution Policy ปิดกั้น | รันคำสั่งใน 2.4 |
 | `Access Denied` เมื่อรันแบบ Remote | สิทธิ์ไม่พอ หรือ WinRM ปิดอยู่ | ตรวจสอบสิทธิ์ Admin และเปิด WinRM (`Enable-PSRemoting`) |
 | Microsoft365 scripts ค้างที่หน้า login | ยังไม่ได้ authenticate หรือ token หมดอายุ | รัน `Disconnect-MgGraph` แล้วรันสคริปต์ใหม่ |
 | Module `Microsoft.Graph` ไม่พบ | ยังไม่ได้ติดตั้งโมดูล | รันคำสั่งติดตั้งใน หัวข้อ 1 |
