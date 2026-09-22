@@ -11,6 +11,7 @@
 | สิทธิ์ | Local Administrator (สำหรับสคริปต์ที่ต้องจัดการ Service/Remote) |
 | โมดูลเสริม | `Microsoft.Graph` (เฉพาะสคริปต์ในโฟลเดอร์ `Microsoft365`) |
 | เครือข่าย | WinRM เปิดใช้งานบนเครื่องปลายทาง หากต้องรันแบบ Remote (`-ComputerName`) |
+| สิทธิ์ Remote CIM/WMI | บัญชีที่รันสคริปต์ต้องอยู่ใน local `Administrators` group ของเครื่องปลายทาง และ firewall ต้องเปิด rule "Windows Management Instrumentation (WMI)" |
 
 ติดตั้งโมดูล Microsoft Graph (ครั้งเดียว):
 
@@ -143,6 +144,32 @@ Register-ScheduledTask -TaskName "Check-DiskSpace" -Action $action -Trigger $tri
 |---|---|---|
 | `'git' is not recognized as an internal or external command` | ยังไม่ได้ติดตั้ง Git หรือติดตั้งแล้วแต่ PATH ไม่ถูกอัปเดต | ติดตั้ง Git ตามขั้นตอนใน 2.1 แล้วเปิด terminal ใหม่ |
 | `...cannot be loaded because running scripts is disabled` | Execution Policy ปิดกั้น | รันคำสั่งใน 2.4 |
+| `WARNING: Unable to query <computer> : Access is denied` | รันสคริปต์แบบไม่ใช่ Admin, บัญชีไม่มีสิทธิ์บนเครื่องปลายทาง, หรือ firewall/DCOM ปิดกั้น WMI | ดูวิธีแก้แบบละเอียดใน 6.1 |
 | `Access Denied` เมื่อรันแบบ Remote | สิทธิ์ไม่พอ หรือ WinRM ปิดอยู่ | ตรวจสอบสิทธิ์ Admin และเปิด WinRM (`Enable-PSRemoting`) |
 | Microsoft365 scripts ค้างที่หน้า login | ยังไม่ได้ authenticate หรือ token หมดอายุ | รัน `Disconnect-MgGraph` แล้วรันสคริปต์ใหม่ |
 | Module `Microsoft.Graph` ไม่พบ | ยังไม่ได้ติดตั้งโมดูล | รันคำสั่งติดตั้งใน หัวข้อ 1 |
+
+### 6.1 แก้ปัญหา `Access is denied` ตอนใช้ `Check-DiskSpace.ps1` / `Get-ComputerInfo.ps1`
+
+Error นี้เกิดจาก `Get-CimInstance` เรียกไปที่เครื่องปลายทาง (`-ComputerName`) แล้วถูกปฏิเสธสิทธิ์ ให้ไล่เช็คตามลำดับ:
+
+1. **รัน PowerShell แบบ Run as Administrator** — คลิกขวา PowerShell แล้วเลือก "Run as administrator" ก่อนรันสคริปต์อีกครั้ง
+2. **ตรวจสอบว่าบัญชีที่ใช้รันอยู่ใน local Administrators group ของเครื่องปลายทาง** เช่น `A-144848`:
+   ```powershell
+   Invoke-Command -ComputerName A-144848 -ScriptBlock { net localgroup Administrators }
+   ```
+3. **ถ้าใช้บัญชี local (ไม่ใช่ domain account)** Windows จะ block remote admin token โดย default (UAC remote restriction) ต้องตั้งค่านี้บนเครื่องปลายทางแล้ว restart:
+   ```powershell
+   New-ItemProperty -Path HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System `
+       -Name LocalAccountTokenFilterPolicy -PropertyType DWord -Value 1 -Force
+   ```
+4. **เปิด Firewall rule สำหรับ WMI** บนเครื่องปลายทาง:
+   ```powershell
+   Enable-NetFirewallRule -DisplayGroup "Windows Management Instrumentation (WMI)"
+   ```
+5. **ทดสอบว่าเครื่องปลายทางเข้าถึงได้จริง** ก่อนรันสคริปต์ซ้ำ:
+   ```powershell
+   Test-NetConnection -ComputerName A-144848 -Port 135
+   Get-CimInstance -ClassName Win32_OperatingSystem -ComputerName A-144848
+   ```
+6. ถ้ายัง Access Denied อยู่ ให้ตรวจสอบว่าเครื่องปลายทางไม่ได้ถูกจำกัดด้วย Group Policy (เช่น "Network access: Sharing and security model" หรือ WMI namespace security ที่ถูกปรับแต่งไว้)
